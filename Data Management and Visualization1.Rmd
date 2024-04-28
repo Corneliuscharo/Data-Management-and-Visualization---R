@@ -1,0 +1,291 @@
+---
+title: "Untitled"
+output: word_document
+date: "2023-06-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(treemapify)
+library(waffle)
+library(ggplot2)
+library("psych")
+```
+
+
+```{r}
+Sample_Superstore <- read.csv("C:/Users/User/Desktop/Sample - Superstore.csv")
+head(Sample_Superstore)
+```
+
+
+```{r}
+str(Sample_Superstore)
+```
+
+
+```{r}
+describe(Sample_Superstore)
+```
+
+# Data cleaning
+```{r}
+#Check for missing data
+colSums(is.na(Sample_Superstore))
+#check the presence of any duplicates
+sum(duplicated(Sample_Superstore))
+```
+
+
+
+##  Exploratory data analysis
+
+Which of the ship mode did each segment (Home Office, Corporate, Consumer) prefer?
+```{r}
+Sample_Superstore %>% 
+    ggplot(aes(x=`Ship.Mode`, y=`Segment`, shape=`Segment`, color=`Segment`))+
+    geom_count()+
+    scale_size(range = c(3,18))+
+    theme_light()+
+    labs(title='Ship Mode per Segment')+
+    theme(plot.title = element_text(size = 12, face = "bold", hjust=0.5))
+```
+Based on figure 1, every market prefers the tried-and-true basic ship configuration.
+Also all part of the ship has the same minimum ship mode option on the same day.
+
+
+
+```{r}
+customer <- Sample_Superstore %>%
+    group_by(`Customer.Name`) %>%
+    summarize('Total Item'=sum(Quantity)) %>%
+    arrange(-`Total Item`) %>%
+    slice(1:5)
+```
+
+
+```{r}
+customer %>%
+    ggplot(aes(x=reorder(`Customer.Name`, `Total Item`), y=`Total Item`, color=`Customer.Name`))+
+    geom_point(stat='identity', size=12)+
+    geom_segment(aes(y=0, xend=`Customer.Name`, yend=`Total Item`))+
+    geom_text(aes(label=`Total Item`), color='white', size=5, vjust=0.5, fontface='bold')+
+    theme_classic()+
+    labs(title='Top 5 Customers\nby Total Purchased Items')+
+    theme(plot.title=element_text(size=20, hjust=0.5, face='bold'))+
+    scale_y_continuous(limits=c(0, 155))+
+    coord_flip()
+```
+
+With 150 purchases at the store, Jonathan Doherty is at the top of that list.
+
+
+```{r}
+customerSales <- Sample_Superstore %>%
+    group_by(`Customer.Name`) %>%
+    summarize('Total Payment'=sum(Sales), 'Total Item'=sum(Quantity)) %>%
+    arrange(-`Total Payment`) %>%
+    slice(1:5)
+```
+
+
+
+```{r}
+customerSales %>%
+    ggplot(aes(x=reorder(`Customer.Name`, `Total Payment`), y=`Total Payment`, fill=`Customer.Name`))+
+    geom_bar(stat='identity')+
+    geom_text(aes(label=paste0(round(`Total Payment`), '\nUSD')), color='white', size=5, vjust=2, fontface='bold')+
+    theme_classic()+
+    labs(title='Top 5 Customers\nby Total Payment')+
+    theme(plot.title=element_text(size=20, hjust=0.5, face='bold'))+
+    scale_y_continuous(limits=c(0, 26000))
+```
+
+Sean Miller, who dropped more than $25,000, topped the list of five customers who paid the most. That's nearly twice as much as the fifth-place finishers got paid.
+
+
+```{r}
+state <- Sample_Superstore %>%
+    group_by(`State`) %>%
+    summarize(count=n()) %>%
+    arrange(-`count`)
+polarPlotData <- slice(state, 1:5)[c('State', 'count')] %>%
+    mutate(position=count/2)
+```
+
+
+```{r}
+polarPlotData %>%
+    ggplot(aes(x=reorder(State, -count), y=count, fill=State, order_by=count))+
+    geom_bar(stat='identity')+
+    geom_text(aes(y=position, label=count), color='white')+
+    coord_polar()+
+    labs(title='Top 5 State by Total Customer',
+        x='State')+
+    theme_light()+
+    theme(plot.title=element_text(size=20, face='bold', hjust=0.5),
+          axis.text.x=element_text(face='bold'))
+```
+
+California accounts for a major portion of the consumer base in 2001. It is more than four times larger than Washington, DC.
+
+
+```{r}
+reg <- Sample_Superstore %>%
+    group_by(Region) %>%
+    summarize(count=n())
+
+reg %<>% 
+    mutate(position=cumsum(reg$count)-(0.5*count),
+           percent=(count/sum(reg$count)*100)) %>%
+    # To be able to use position_stack in geom_text
+    as.data.frame()
+```
+
+```{r}
+reg %>%
+    ggplot(aes(x='', y=count, fill=Region))+
+    geom_bar(stat='identity', width=1)+
+    geom_text(aes(label=paste0(round(percent, 2), '%')), size=8, fontface='bold', color='white', position=position_stack(0.5))+
+    coord_polar(theta='y', start=0)+
+    labs(title='Region Distribution')+
+    theme_void()+
+    theme(plot.title=element_text(size=20, hjust=0.5, face='bold'))
+```
+
+It is clear that the majority of sales come from the Western United States.
+
+
+
+
+```{r}
+Sample_Superstore %>%
+    group_by(Segment, `Sub.Category`) %>%
+    summarize("Total Payment"=sum(Sales)) %>%
+    arrange(`Segment`, -`Total Payment`) %>%
+    slice(1)
+```
+
+
+```{r}
+Sample_Superstore %>%
+    group_by(Segment, `Sub.Category`) %>%
+    summarize("Total Payment"=sum(Sales)) %>%
+    ggplot(aes(x=Segment, y=`Sub.Category`, fill=`Total Payment`))+
+    scale_fill_viridis_b(option = 'D')+
+    geom_tile(color='white')+
+    geom_text(aes(label=paste0(round(`Total Payment`, 2))), color='white', fontface='bold')+
+    labs(title='Segment vs Sub-Category\nby Sales')+
+    theme_classic()+
+    theme(plot.title=element_text(size=20, face='bold', hjust=0.5))
+```
+
+Chairs and telephones dominate their respective categories.
+The retail industry incurred the greatest costs.
+
+
+
+```{r}
+Sample_Superstore %>%
+    ggplot(aes(x=Sales, y=Profit, color=Discount))+
+    geom_point(size=3)+
+    geom_rug()+
+    labs(title='Sales vs Profit')+
+    theme_light()+
+    theme(plot.title=element_text(size=20, face='bold', hjust=0.5))
+```
+
+When sales are high, profits usually follow suit.
+The discount has a significant impact on the earnings. The more the discount, the less money the store makes.
+
+
+
+```{r}
+Sample_Superstore %>%
+    ggplot(aes(x=Sales, y=Profit))+
+    geom_point(size=3, alpha=0.4)+
+    geom_smooth(aes(color=Category), method='gam', fullrange = TRUE)+
+    facet_wrap(~Category)+
+    labs(title='Sales vs Profit\nfor Each Category')+
+    theme_light()+
+    theme(plot.title=element_text(size=12, face='bold', hjust=0.5))
+```
+
+It would appear that demand for technological and supply goods for the workplace is on the upswing based on the trend line. However, with more demand comes the likelihood of cheaper furnishings. It's probably because of how often advertisements target certain age ranges.
+
+
+```{r}
+Sample_Superstore %>%
+    ggplot(aes(x=Discount, y=Profit))+
+    geom_bin2d(size=3)+
+    labs(title='Discount vs Profit')+
+    theme_light()+
+    theme(plot.title=element_text(size=12, face='bold', hjust=0.5))
+```
+
+We all know that the store's discount will take a hit from the sales.
+
+
+```{r}
+Sample_Superstore %>%
+    ggplot(aes(x=Discount, y=Sales))+
+    geom_hex(size=3)+
+    labs(title='Discount vs Sales')+
+    theme_light()+
+    theme(plot.title=element_text(size=20, face='bold', hjust=0.5))
+```
+
+The percentage off is not related to the volume of sales. Even without a price cut, it's clear that numerous purchases have been made.
+
+
+```{r}
+Sample_Superstore %>%
+    ggplot(aes(x=Discount, y=Profit, color=Category, fill=Category))+
+    geom_histogram(stat='identity', bins=10)+
+    facet_wrap(~`Sub.Category`)+
+    labs(title='Discount vs Profit\nby Sub-Categories')+
+    theme_light()+
+    theme(plot.title=element_text(size=20, face='bold', hjust=0.5))
+```
+
+Without a discount, binders are the most profitable item for the shop. But when you factor in the 80% off coupon for binders, the situation completely changes. Over 20,000 USD was lost at the shop.
+
+
+```{r}
+df_disc <- Sample_Superstore[Sample_Superstore$Discount >= 0.25, ]
+df_disc %>%
+    ggplot(aes(x=Discount, fill= Sub.Category))+
+    geom_bar()+
+    facet_wrap(~Category)+
+    labs(title='Total discounted item above 25%\nby Categories')+
+    theme_light()+
+    theme(plot.title=element_text(size=12, face='bold', hjust=0.5))
+```
+
+The products in the office supplies section are frequently on sale at steep discounts. More than 350 products are discounted by 70%, while another 300 are discounted by 80%.
+
+
+
+```{r}
+Sample_Superstore %>%
+    ggplot(aes(x=Quantity, y=Profit))+
+    geom_density_2d()+
+    stat_density2d(aes(fill = ..level..), geom = "polygon")+
+    labs(title='Quantity vs Profit')+
+    theme_light()+
+    theme(plot.title=element_text(size=20, face='bold', hjust=0.5))
+```
+
+The more merchandise is sold, the lower the store's profit will be. The accompanying scatter plot indicates that there is no relationship between quantity and sales.
+
+
+
+
+
+
